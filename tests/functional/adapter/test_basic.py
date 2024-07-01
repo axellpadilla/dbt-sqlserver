@@ -73,4 +73,4 @@ class TestValidateConnectionSQLServer(BaseValidateConnection):
 
 
 class TestTableMaterializationSQLServer(BaseTableMaterialization):
-    ...
+    pass
