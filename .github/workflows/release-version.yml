@@ -11,14 +11,17 @@ jobs:
     name: Release new version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.9'
 
+      - name: Install uv
+        run: pip install uv
+
       - name: Install dependencies
-        run: pip install -r dev_requirements.txt
+        run: uv pip install --system -r dev_requirements.txt
 
       - name: Verify version match
         run: python setup.py verify

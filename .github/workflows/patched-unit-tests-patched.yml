@@ -28,10 +28,13 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        run: pip install uv
 
       - name: Install dependencies
-        run: pip install -r dev_requirements.txt
+        run: uv pip install --system -r dev_requirements.txt
 
       - name: Run unit tests
         run: pytest -n auto -ra -v tests/unit

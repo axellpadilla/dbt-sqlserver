@@ -46,15 +46,15 @@ except ModuleNotFoundError as exc:
     ManagedIdentityCredential = None
     _AZURE_IDENTITY_IMPORT_ERROR = exc
 
-from dbt.adapters.contracts.connection import AdapterResponse, Connection, ConnectionState
-from dbt.adapters.events.logging import AdapterLogger
-from dbt.adapters.events.types import AdapterEventDebug, ConnectionUsed, SQLQuery, SQLQueryStatus
-from dbt.adapters.sql.connections import SQLConnectionManager
 from dbt_common.clients.agate_helper import empty_table
 from dbt_common.events.contextvars import get_node_info
 from dbt_common.events.functions import fire_event
 from dbt_common.utils.casting import cast_to_str
 
+from dbt.adapters.contracts.connection import AdapterResponse, Connection, ConnectionState
+from dbt.adapters.events.logging import AdapterLogger
+from dbt.adapters.events.types import AdapterEventDebug, ConnectionUsed, SQLQuery, SQLQueryStatus
+from dbt.adapters.sql.connections import SQLConnectionManager
 from dbt.adapters.sqlserver import __version__
 from dbt.adapters.sqlserver.sqlserver_credentials import SQLServerCredentials
 
@@ -92,9 +92,11 @@ MSSQL_PYTHON_UNSUPPORTED_AUTHENTICATIONS = {
 def _require_azure_identity(authentication: str) -> None:
     if _AZURE_IDENTITY_IMPORT_ERROR is not None:
         raise dbt_common.exceptions.DbtRuntimeError(
-            "Azure authentication '{}' requires the optional dependency 'azure-identity'. "
-            "Install it with `pip install azure-identity` "
-            "or use a non-Azure authentication mode.".format(authentication)
+            (
+                "Azure authentication '{}' requires the optional "
+                "dependency 'azure-identity'. Install it with `pip install "
+                "azure-identity` or use a non-Azure authentication mode."
+            ).format(authentication)
         ) from _AZURE_IDENTITY_IMPORT_ERROR
 
 

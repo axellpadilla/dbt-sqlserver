@@ -8,7 +8,7 @@ PYTEST ?= $(VENV)/bin/pytest
 .PHONY: dev
 dev: ## Installs adapter in develop mode along with development dependencies
 	@\
-	uv venv $(VENV) && uv pip install --python $(PYTHON) -r dev_requirements.txt && $(PRE_COMMIT) install
+	uv pip install -r dev_requirements.txt && pre-commit install
 
 .PHONY: mypy
 mypy: ## Runs mypy against staged changes for static type checking.

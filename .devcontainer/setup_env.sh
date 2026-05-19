@@ -1,14 +1,15 @@
-#!/bin/bash
 set -euo pipefail
+
+cp test.env.sample test.env
 
 if [ ! -f test.env ]; then
 	cp test.env.sample test.env
 fi
 
-sudo apt-get update
-sudo apt-get install -y libltdl7 libkrb5-3 libgssapi-krb5-2
+# Install uv in the container user environment.
+pip install uv
 
-export UV_VENV_CLEAR=1
-uv venv .venv
-uv pip install --python .venv/bin/python -r dev_requirements.txt
-.venv/bin/pre-commit install
+# Use a workspace-local virtualenv so package installs do not fail on user permissions.
+uv pip install -r dev_requirements.txt
+source .venv/bin/activate
+pre-commit install

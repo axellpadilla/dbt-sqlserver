@@ -1,5 +1,6 @@
-sudo install -d -m 0755 /usr/share/keyrings
-curl -fsSL https://packages.microsoft.com/keys/microsoft-rolling.asc | gpg --dearmor | sudo tee /usr/share/keyrings/microsoft-prod.gpg >/dev/null
+curl https://packages.microsoft.com/keys/microsoft.asc \
+  | gpg --dearmor \
+  | sudo tee /usr/share/keyrings/microsoft-prod.gpg >/dev/null
 
 #Download appropriate package for the OS version
 #Choose only ONE of the following, corresponding to your OS version
