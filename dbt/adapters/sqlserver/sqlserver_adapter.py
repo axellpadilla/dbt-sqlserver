@@ -50,6 +50,7 @@ class SQLServerAdapter(SQLAdapter):
 
     def __init__(self, config, mp_context=None):
         super().__init__(config, mp_context)
+        SQLServerRelation.disable_require_alias = self.behavior.dbt_sqlserver_disable_require_alias
         if self.behavior.dbt_sqlserver_use_native_string_types:
             self.Column = SQLServerColumnNative
 
@@ -74,6 +75,14 @@ class SQLServerAdapter(SQLAdapter):
                     "`custom_schema_name` is used directly without prefixing `target.schema`. "
                     "For a permanent solution, override the `sqlserver__generate_schema_name` "
                     "macro in your project instead."
+                ),
+            },
+            {
+                "name": "dbt_sqlserver_disable_require_alias",
+                "default": True,
+                "description": (
+                    "When True, SQL Server limited relations do not automatically receive "
+                    "dbt-generated aliases. Set this false to restore legacy alias generation."
                 ),
             },
             {

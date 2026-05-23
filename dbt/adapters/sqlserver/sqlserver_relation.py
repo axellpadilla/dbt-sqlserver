@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Optional, Type
+from typing import ClassVar, Optional, Type
 
 from dbt_common.exceptions import DbtRuntimeError
 
@@ -21,21 +21,15 @@ class SQLServerRelation(BaseRelation):
     )
     quote_policy: SQLServerQuotePolicy = field(default_factory=lambda: SQLServerQuotePolicy())
     require_alias: bool = False
+    disable_require_alias: ClassVar[bool] = True
 
     @classproperty
     def get_relation_type(cls) -> Type[SQLServerRelationType]:
         return SQLServerRelationType
 
-    def render_limited(self) -> str:
-        rendered = self.render()
-        if self.limit is None:
-            return rendered
-        elif self.limit == 0:
-            return f"(select * from {rendered} where 1=0) AS {self._render_limited_alias()}"
-        else:
-            return f"(select TOP {self.limit} * from {rendered}) AS {self._render_limited_alias()}"
-
     def __post_init__(self):
+        object.__setattr__(self, "require_alias", not self.disable_require_alias)
+
         # Check for length of Redshift table/view names.
         # Check self.type to exclude test relation identifiers
         if (
@@ -47,6 +41,15 @@ class SQLServerRelation(BaseRelation):
                 f"Relation name '{self.identifier}' "
                 f"is longer than {MAX_CHARACTERS_IN_IDENTIFIER} characters"
             )
+
+    def render_limited(self) -> str:
+        rendered = self.render()
+        if self.limit is None:
+            return rendered
+        elif self.limit == 0:
+            return f"(select * from {rendered} where 1=0){self._render_limited_alias()}"
+        else:
+            return f"(select TOP {self.limit} * from {rendered}){self._render_limited_alias()}"
 
     def relation_max_name_length(self):
         return MAX_CHARACTERS_IN_IDENTIFIER

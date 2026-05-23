@@ -19,8 +19,16 @@ UNION ALL
 select 3 as id, cast('2025-01-03 02:02:59' as datetime2) as event_time
 """
 
+_model_that_samples_input_sql = """
+select * from {{ ref('input_model') }} as input_model_alias
+"""
+
 
 class TestSQLServerSampleMode(BaseSampleModeTest):
+    @pytest.fixture(scope="class")
+    def model_that_samples_input_sql(self) -> str:
+        return _model_that_samples_input_sql
+
     @pytest.fixture(scope="class")
     def input_model_sql(self) -> str:
         return _input_model_sql
