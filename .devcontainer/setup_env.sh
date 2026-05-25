@@ -2,8 +2,9 @@ set -euo pipefail
 
 cp test.env.sample test.env
 
-docker compose build
-docker compose up -d
+if [ ! -f test.env ]; then
+	cp test.env.sample test.env
+fi
 
 # Install uv in the container user environment.
 pip install uv

@@ -6,6 +6,8 @@
         {{ get_assert_columns_equivalent(sql) }}
     {%- endif %}
 
+    {% set existing_relation = load_cached_relation(relation) %}
+
     {% set query %}
         CREATE OR ALTER VIEW {{ relation.include(database=False) }} AS {{ sql }};
     {% endset %}

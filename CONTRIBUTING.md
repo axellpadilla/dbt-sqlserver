@@ -1,16 +1,15 @@
 # Development of the adapter
 
-Python 3.10 is used for developing the adapter. To get started, bootstrap your environment as follows:
-
-Create a virtual environment, [pyenv](https://github.com/pyenv/pyenv) is used in the example:
+Python 3.10 is used for developing the adapter. To get started, bootstrap your environment with `uv`:
 
 ```shell
-pyenv install 3.10.7
-pyenv virtualenv 3.10.7 dbt-sqlserver
-pyenv activate dbt-sqlserver
+uv venv .venv
+uv pip install --python .venv/bin/python -r dev_requirements.txt
 ```
 
-Install the development dependencies and pre-commit and get information about possible make commands:
+This creates a local `.venv` in the workspace and installs the adapter in editable mode together with the development dependencies.
+
+You can also use the repo bootstrap target, which performs the same setup and installs the pre-commit hooks:
 
 ```shell
 make dev
@@ -18,11 +17,12 @@ make help
 ```
 
 [Pre-commit](https://pre-commit.com/) helps us to maintain a consistent style and code quality across the entire project.
-After running `make dev`, pre-commit will automatically validate your commits and fix any formatting issues whenever possible.
+After running `make dev`, pre-commit will use the tools installed in `.venv` and automatically validate your commits whenever possible.
 
 ## Devcontainer
 
-A devcontainer file has been added since 1.7.2 to simpify creating the development environment.
+A devcontainer file has been added since 1.7.2 to simplify creating the development environment.
+It installs `uv`, creates `.venv`, installs the development dependencies, and starts the local SQL Server container on startup.
 
 ## Testing
 
@@ -32,13 +32,33 @@ The functional tests require a running SQL Server instance. You can easily spin 
 make server
 ```
 
+The default development flow uses the existing ODBC-based path. If you want to develop or test the optional `mssql-python` backend instead, make sure the package is installed in your environment before running tests.
+
+```shell
+pip install mssql-python
+```
+
+On Debian/Ubuntu-based environments, `mssql-python` may also require these system libraries:
+
+```shell
+sudo apt-get install -y libltdl7 libkrb5-3 libgssapi-krb5-2
+```
+
 This will use Docker Compose to spin up a local instance of SQL Server. Docker Compose is now bundled with Docker, so make sure to [install the latest version of Docker](https://docs.docker.com/get-docker/).
 
 Next, tell our tests how they should connect to the local instance by creating a file called `test.env` in the root of the project.
 You can use the provided `test.env.sample` as a base and if you started the server with `make server`, then this matches the instance running on your local machine.
 
+If you are testing the optional `mssql-python` backend, also enable its profile flag in `test.env` so the adapter selects that implementation instead of the legacy driver-based one.
+
 ```shell
 cp test.env.sample test.env
+```
+
+When using the optional `mssql-python` backend, update `test.env` with:
+
+```shell
+SQLSERVER_TEST_USE_MSSQL_PYTHON=True
 ```
 
 You can tweak the contents of this file to test against a different database.
@@ -56,6 +76,8 @@ You can use the following commands to run the unit and the functional tests resp
 make unit
 make functional
 ```
+
+This remains the documented test procedure for both connection backends. When the `mssql-python` flag is enabled, run the same commands after installing `mssql-python` and setting `SQLSERVER_TEST_USE_MSSQL_PYTHON=True` in `test.env`.
 
 ## CI/CD
 
