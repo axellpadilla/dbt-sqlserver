@@ -2,6 +2,7 @@ from typing import List, Optional
 
 import agate
 import dbt_common.exceptions
+from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
     ConstraintType,
@@ -25,7 +26,7 @@ from dbt.adapters.sqlserver.sqlserver_relation import SQLServerRelation
 
 class SQLServerAdapter(SQLAdapter):
     """
-    Controls actual implmentation of adapter, and ability to override certain methods.
+    Controls actual implementation of adapter, and ability to override certain methods.
     """
 
     ConnectionManager = SQLServerConnectionManager
@@ -49,8 +50,79 @@ class SQLServerAdapter(SQLAdapter):
 
     def __init__(self, config, mp_context=None):
         super().__init__(config, mp_context)
+        SQLServerRelation.disable_empty_relation_aliases = (
+            self.behavior.dbt_sqlserver_disable_empty_relation_aliases
+        )
         if self.behavior.dbt_sqlserver_use_native_string_types:
             self.Column = SQLServerColumnNative
+
+    @property
+    def _behavior_flags(self) -> List[BehaviorFlag]:
+        return [
+            {
+                "name": "empty",
+                "default": False,
+                "description": (
+                    "When enabled, table and view materializations will be created as empty "
+                    "structures (no data)."
+                ),
+            },
+            {
+                "name": "dbt_sqlserver_use_default_schema_concat",
+                "default": False,
+                "description": (
+                    "When True, uses dbt-core's standard schema concatenation "
+                    "(`target.schema` + `_` + `custom_schema_name`). "
+                    "When False (default), uses legacy adapter behaviour: "
+                    "`custom_schema_name` is used directly without prefixing `target.schema`. "
+                    "For a permanent solution, override the `sqlserver__generate_schema_name` "
+                    "macro in your project instead."
+                ),
+            },
+            {
+                "name": "dbt_sqlserver_disable_empty_relation_aliases",
+                "default": True,
+                "description": (
+                    "When True, SQL Server limited relations used by --empty and sample mode "
+                    "do not automatically receive dbt-generated aliases. Set this false to opt "
+                    "out of alias generation temporarily for testing."
+                ),
+            },
+            {
+                "name": "dbt_sqlserver_use_native_string_types",
+                "default": False,
+                "description": (
+                    "When True, uses SQL Server-native string type mappings: "
+                    "STRING -> VARCHAR(MAX), NCHAR -> NCHAR(1), NVARCHAR -> NVARCHAR(4000). "
+                    "When False (default), preserves legacy mappings: "
+                    "STRING and NVARCHAR -> VARCHAR(8000), NCHAR -> CHAR(1). "
+                    "The new behaviour is intended to become the default in a future release."
+                ),
+            },
+            {
+                "name": "sqlserver__enable_safe_type_expansion",
+                "default": False,
+                "source": "dbt-sqlserver",
+                "description": (
+                    "Allow the SQL Server adapter to widen column types during schema-expansion. "
+                    "This enables promotions like varchar->nvarchar, "
+                    "  bit->tinyint->smallint->int->bigint, "
+                    "and numeric(p,s)->numeric(p2,s2) using alter column."
+                ),
+                "docs_url": None,
+            },
+            {
+                "name": "sqlserver__prefer_single_alter_column",
+                "default": False,
+                "source": "dbt-sqlserver",
+                "description": (
+                    "If true, prefer running a single "
+                    "ALTER ... ALTER COLUMN for type expansions on tables. When false, "
+                    "fall back to add/copy/drop/rename flow."
+                ),
+                "docs_url": None,
+            },
+        ]
 
     @available.parse(lambda *a, **k: [])
     def get_column_schema_from_query(self, sql: str) -> List[BaseColumn]:
@@ -144,7 +216,7 @@ class SQLServerAdapter(SQLAdapter):
         except_operator: str = "EXCEPT",
     ) -> str:
         """
-        note: using is not supported on Synapse so COLUMNS_EQUAL_SQL is adjsuted
+        note: using is not supported on Synapse so COLUMNS_EQUAL_SQL is adjusted
         Generate SQL for a query that returns a single row with a two
         columns: the number of rows that are different between the two
         relations and the number of mismatched rows.
@@ -276,68 +348,6 @@ class SQLServerAdapter(SQLAdapter):
                 )
 
                 self.alter_column_type(current, column_name, new_type)
-
-    @property
-    def _behavior_flags(self) -> List[dict]:
-        """Adapter-specific behavior flags. These are merged with project overrides
-        by the BaseAdapter.behavior machinery.
-        """
-        return [
-            {
-                "name": "sqlserver__enable_safe_type_expansion",
-                "default": False,
-                "source": "dbt-sqlserver",
-                "description": (
-                    "Allow the SQL Server adapter to widen column types during schema-expansion. "
-                    "This enables promotions like varchar->nvarchar, "
-                    "  bit->tinyint->smallint->int->bigint, "
-                    "and numeric(p,s)->numeric(p2,s2) using alter column."
-                ),
-                "docs_url": None,
-            },
-            {
-                "name": "sqlserver__prefer_single_alter_column",
-                "default": False,
-                "source": "dbt-sqlserver",
-                "description": (
-                    "If true, prefer running a single "
-                    "ALTER ... ALTER COLUMN for type expansions on tables. When false, "
-                    "fall back to add/copy/drop/rename flow."
-                ),
-                "docs_url": None,
-            },
-            {
-                "name": "empty",
-                "default": False,
-                "description": (
-                    "When enabled, table and view materializations will be created as empty "
-                    "structures (no data)."
-                ),
-            },
-            {
-                "name": "dbt_sqlserver_use_default_schema_concat",
-                "default": False,
-                "description": (
-                    "When True, uses dbt-core's standard schema concatenation "
-                    "(`target.schema` + `_` + `custom_schema_name`). "
-                    "When False (default), uses legacy adapter behaviour: "
-                    "`custom_schema_name` is used directly without prefixing `target.schema`. "
-                    "For a permanent solution, override the `sqlserver__generate_schema_name` "
-                    "macro in your project instead."
-                ),
-            },
-            {
-                "name": "dbt_sqlserver_use_native_string_types",
-                "default": False,
-                "description": (
-                    "When True, uses SQL Server-native string type mappings: "
-                    "STRING -> VARCHAR(MAX), NCHAR -> NCHAR(1), NVARCHAR -> NVARCHAR(4000). "
-                    "When False (default), preserves legacy mappings: "
-                    "STRING and NVARCHAR -> VARCHAR(8000), NCHAR -> CHAR(1). "
-                    "The new behaviour is intended to become the default in a future release."
-                ),
-            },
-        ]
 
 
 COLUMNS_EQUAL_SQL = """
