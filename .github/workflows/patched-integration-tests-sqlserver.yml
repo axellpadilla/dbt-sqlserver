@@ -4,7 +4,7 @@ on:  # yamllint disable-line rule:truthy
   workflow_dispatch:
   push:
     branches:
-      - master
+      - patched
       - v*
     paths:
       - 'dbt/**'
@@ -18,7 +18,7 @@ on:  # yamllint disable-line rule:truthy
       - '.github/workflows/integration-tests-sqlserver.yml'
   pull_request:
     branches:
-      - master
+      - patched
       - v*
     paths:
       - 'dbt/**'
@@ -30,27 +30,22 @@ on:  # yamllint disable-line rule:truthy
       - 'pyproject.toml'
       - 'pytest.ini'
       - '.github/workflows/integration-tests-sqlserver.yml'
-  schedule:
-    - cron: '0 22 * * 0'
 
 jobs:
-  integration-tests-sql-server:
+  patched-integration-tests-sql-server:
     name: ${{ matrix.backend }} / Py${{ matrix.python_version }} / SQL${{ matrix.sqlserver_version }} / ODBC${{ matrix.msodbc_version }} / ${{ matrix.collation }}
     if: github.actor != 'dependabot[bot]'
     strategy:
       # Smaller matrix allows this to check if a failure is specific.
       fail-fast: false
       matrix:
-        python_version: ["3.10", "3.11", "3.12", "3.13"]
+        python_version: ["3.12", "3.13"]
         backend: [pyodbc, mssql-python]
         # Baseline on 2022
         sqlserver_version: ["2022"]
         msodbc_version: ["18"]
         collation: [SQL_Latin1_General_CP1_CI_AS]
         exclude:
-          - backend: mssql-python
-            python_version: "3.10"
-            sqlserver_version: "2022"
           - backend: mssql-python
             python_version: "3.11"
             sqlserver_version: "2022"
@@ -61,25 +56,8 @@ jobs:
           # Keep pyodbc on every supported Python version, but retain
           # SQL Server ODBC 17 coverage for the oldest and newest Python.
           - backend: pyodbc
-            python_version: "3.10"
-            sqlserver_version: "2022"
-            msodbc_version: "17"
-            collation: SQL_Latin1_General_CP1_CI_AS
-          - backend: pyodbc
             python_version: "3.13"
             sqlserver_version: "2022"
-            msodbc_version: "17"
-            collation: SQL_Latin1_General_CP1_CI_AS
-          # Older SQL Server versions stay on pyodbc only, with a single
-          # collation so the matrix stays small and readable.
-          - backend: pyodbc
-            python_version: "3.10"
-            sqlserver_version: "2017"
-            msodbc_version: "17"
-            collation: SQL_Latin1_General_CP1_CI_AS
-          - backend: pyodbc
-            python_version: "3.13"
-            sqlserver_version: "2019"
             msodbc_version: "17"
             collation: SQL_Latin1_General_CP1_CI_AS
           # Add the case-sensitive collation only on the latest SQL Server

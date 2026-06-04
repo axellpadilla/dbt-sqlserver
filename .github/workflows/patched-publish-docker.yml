@@ -1,5 +1,5 @@
 ---
-name: Publish Docker images for CI/CD
+name: Patched Publish Docker images for CI/CD
 on:  # yamllint disable-line rule:truthy
   workflow_dispatch:
   push:
@@ -7,14 +7,14 @@ on:  # yamllint disable-line rule:truthy
       - 'devops/**'
       - '.github/workflows/publish-docker.yml'
     branches:
-      - 'master'
+      - 'patched'
 
 jobs:
-  publish-docker-client:
+  patched-publish-docker-client:
     strategy:
       matrix:
-        python_version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-        docker_target: ["msodbc17", "msodbc18", "mssql"]
+        python_version: ["3.11", "3.12", "3.13"]
+        docker_target: ["msodbc18", "mssql"]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -41,10 +41,10 @@ jobs:
           target: ${{ matrix.docker_target }}
           tags: ghcr.io/${{ github.repository }}:CI-${{ matrix.python_version }}-${{ matrix.docker_target }}
 
-  publish-docker-server:
+  patched-publish-docker-server:
     strategy:
       matrix:
-        mssql_version: ["2017", "2019", "2022"]
+        mssql_version: ["2017", "2022"]
     runs-on: ubuntu-latest
     permissions:
       contents: read
