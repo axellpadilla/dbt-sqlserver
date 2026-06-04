@@ -13,8 +13,15 @@ jobs:
   patched-publish-docker-client:
     strategy:
       matrix:
-        python_version: ["3.11", "3.12", "3.13"]
-        docker_target: ["msodbc18", "mssql"]
+        include:
+          - python_version: "3.12"
+            docker_target: "msodbc18"
+          - python_version: "3.13"
+            docker_target: "msodbc18"
+          - python_version: "3.13"
+            docker_target: "msodbc17"
+          - python_version: "3.13"
+            docker_target: "mssql"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -44,7 +51,7 @@ jobs:
   patched-publish-docker-server:
     strategy:
       matrix:
-        mssql_version: ["2017", "2022"]
+        mssql_version: ["2022"]
     runs-on: ubuntu-latest
     permissions:
       contents: read
