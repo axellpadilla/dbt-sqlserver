@@ -8,17 +8,17 @@ PYTEST ?= $(VENV)/bin/pytest
 .PHONY: dev
 dev: ## Installs adapter in develop mode along with development dependencies
 	@\
-	uv pip install -e . --group dev && pre-commit install
+	uv sync --all-extras && pre-commit install
 
 .PHONY: mypy
 mypy: ## Runs mypy against staged changes for static type checking.
 	@\
 	$(PRE_COMMIT) run --hook-stage manual mypy-check | grep -v "INFO"
 
-.PHONY: flake8
-flake8: ## Runs flake8 against staged changes to enforce style guide.
+.PHONY: ruff
+ruff: ## Runs ruff against staged changes to enforce style guide.
 	@\
-	$(PRE_COMMIT) run --hook-stage manual flake8-check | grep -v "INFO"
+	pre-commit run --hook-stage manual ruff-check-manual | grep -v "INFO"
 
 .PHONY: black
 black: ## Runs black  against staged changes to enforce style guide.
@@ -26,38 +26,33 @@ black: ## Runs black  against staged changes to enforce style guide.
 	$(PRE_COMMIT) run --hook-stage manual black-check -v | grep -v "INFO"
 
 .PHONY: lint
-lint: ## Runs flake8 and mypy code checks against staged changes.
+lint: ## Runs ruff and mypy code checks against staged changes.
 	@\
-	$(PRE_COMMIT) run flake8-check --hook-stage manual | grep -v "INFO"; \
-	$(PRE_COMMIT) run mypy-check --hook-stage manual | grep -v "INFO"
+	pre-commit run ruff-check-manual --hook-stage manual | grep -v "INFO"; \
+	pre-commit run mypy-check --hook-stage manual | grep -v "INFO"
 
 .PHONY: all
 all: ## Runs all checks against staged changes.
 	@\
 	$(PRE_COMMIT) run -a
 
-.PHONY: linecheck
-linecheck: ## Checks for all Python lines 100 characters or more
-	@\
-	find dbt -type f -name "*.py" -exec grep -I -r -n '.\{100\}' {} \;
-
 .PHONY: unit
 unit: ## Runs unit tests.
 	@\
-	$(PYTEST) -n auto -ra -v tests/unit
+	uv run pytest -n auto -ra -v tests/unit
 
 .PHONY: functional
 functional: ## Runs functional tests.
 	@\
-	$(PYTEST) -n $(THREADS) -ra -v tests/functional
+	uv run pytest -n $(THREADS) -ra -v tests/functional
 
 .PHONY: test
 test: ## Runs unit tests and code checks against staged changes.
 	@\
-	$(PYTEST) -n auto -ra -v tests/unit; \
-	$(PRE_COMMIT) run black-check --hook-stage manual | grep -v "INFO"; \
-	$(PRE_COMMIT) run flake8-check --hook-stage manual | grep -v "INFO"; \
-	$(PRE_COMMIT) run mypy-check --hook-stage manual | grep -v "INFO"
+	uv run pytest -n auto -ra -v tests/unit; \
+	pre-commit run black-check --hook-stage manual | grep -v "INFO"; \
+	pre-commit run ruff-check-manual --hook-stage manual | grep -v "INFO"; \
+	pre-commit run mypy-check --hook-stage manual | grep -v "INFO"
 
 .PHONY: server
 server: ## Spins up a local MS SQL Server instance for development. Docker-compose is required.
@@ -65,6 +60,7 @@ server: ## Spins up a local MS SQL Server instance for development. Docker-compo
 	docker compose up -d
 
 .PHONY: clean
+clean: ## Removes ignored files and build artifacts from the repo.
 	@echo "cleaning repo"
 	@git clean -f -X
 

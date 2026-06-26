@@ -46,15 +46,25 @@ class SQLServerColumn(Column):
         return f"varchar({size if size > 0 else '8000'})"
 
     def string_type_instance(self, size: int) -> str:
-        """
-        Instance-level string type selection that respects NVARCHAR/NCHAR.
+        """Instance-level string type selection that respects NVARCHAR/NCHAR.
+
+        Handles MAX strings (size == -1) by emitting the appropriate
+        varchar(max) or nvarchar(max) DDL. Fixed-length char/nchar do not
+        support MAX and raise if queried with size == -1.
         """
         dtype = (self.dtype or "").lower()
+        if size == -1:
+            if dtype == "varchar":
+                return "varchar(max)"
+            if dtype == "nvarchar":
+                return "nvarchar(max)"
+            raise DbtRuntimeError(f"{dtype}(max) is not a valid SQL Server type")
         if dtype == "nvarchar":
             return f"nvarchar({size if size > 0 else '4000'})"
         if dtype == "nchar":
             return f"nchar({size if size > 0 else '1'})"
-        # default to varchar/char behaviour
+        if dtype == "char":
+            return f"char({size if size > 0 else '1'})"
         return f"varchar({size if size > 0 else '8000'})"
 
     def literal(self, value: Any) -> str:
@@ -67,13 +77,23 @@ class SQLServerColumn(Column):
             return "datetime2(6)"
         if self.is_string():
             return self.string_type_instance(self.string_size())
-        elif self.is_numeric():
+        elif self.is_decimal_type():
             return self.numeric_type(self.dtype, self.numeric_precision, self.numeric_scale)
         else:
             return self.dtype
 
     def is_string(self) -> bool:
         return self.dtype.lower() in ["varchar", "char", "nvarchar", "nchar"]
+
+    def is_max_string(self) -> bool:
+        """Return True if this is a MAX string column (char_size == -1).
+
+        In SQL Server, MAX is represented as -1 in the catalog views.
+        This applies to varchar(max) and nvarchar(max). char/nchar do not
+        support MAX.
+        """
+        dtype = (self.dtype or "").lower()
+        return dtype in ("varchar", "nvarchar") and int(self.char_size or 0) == -1
 
     def is_number(self):
         return any(
@@ -84,11 +104,31 @@ class SQLServerColumn(Column):
         return self.dtype.lower() in ["float", "real"]
 
     def is_integer(self) -> bool:
-        # Treat BIT as an integer-like type so it participates in integer
-        # promotions (bit -> tinyint -> smallint -> int -> bigint).
-        return self.dtype.lower() in ["int", "integer", "bigint", "smallint", "tinyint", "bit"]
+        # SQL Server exact numeric integer types per MS docs (all versions back to 2017).
+        # bit is classified as "an integer data type" by Microsoft in the Transact-SQL docs
+        # (https://learn.microsoft.com/en-us/sql/t-sql/data-types/bit-transact-sql).
+        # integer is a standard SQL synonym for int kept for ODBC compatibility.
+        return self.dtype.lower() in [
+            "bit",
+            "tinyint",
+            "smallint",
+            "int",
+            "integer",
+            "bigint",
+        ]
 
     def is_numeric(self) -> bool:
+        return self.dtype.lower() in ["numeric", "decimal"]
+
+    def is_fixed_numeric(self) -> bool:
+        return self.dtype.lower() in ["money", "smallmoney"]
+
+    def is_decimal_type(self) -> bool:
+        """Return True for true arbitrary-precision numeric/decimal types only.
+
+        This excludes fixed-scale money/smallmoney which are still classified
+        as numeric by is_numeric() for backward compatibility.
+        """
         return self.dtype.lower() in ["numeric", "decimal"]
 
     def is_fixed_numeric(self) -> bool:
@@ -102,60 +142,124 @@ class SQLServerColumn(Column):
         else:
             return int(self.char_size)
 
-    def can_expand_to(
-        self, other_column: Column, enable_safe_type_expansion: bool = False
-    ) -> bool:
-        # If both are strings, allow size-based expansion regardless of the
-        # feature flag. Only allow family changes (VARCHAR -> NVARCHAR) when
-        # `sqlserver__enable_safe_type_expansion` is set by the adapter.
+    def can_expand_to(self, other_column: "SQLServerColumn") -> bool:
         self_dtype = self.dtype.lower()
         other_dtype = other_column.dtype.lower()
         if self.is_string() and other_column.is_string():
-            self_size = self.string_size()
-            other_size = other_column.string_size()
-
-            if other_size > self_size and self_dtype == other_dtype:
+            if self_dtype != other_dtype:
+                return False
+            self_max = self.is_max_string()
+            other_max = other_column.is_max_string()
+            # MAX -> MAX: not an expansion
+            if self_max and other_max:
+                return False
+            # MAX -> bounded: rejected (would be a shrink)
+            if self_max and not other_max:
+                return False
+            # bounded -> MAX: always an expansion
+            if not self_max and other_max:
                 return True
+            # bounded -> bounded: normal numeric size comparison
+            return other_column.string_size() > self.string_size()
+        return False
 
-            # Allow safe conversions across the CHAR/VARCHAR -> NCHAR/NVARCHAR family
-            # only when the feature flag is enabled. Do NOT allow shrinking
-            # conversions or NVARCHAR -> VARCHAR.
-            if self_dtype in ("varchar", "char") and other_dtype in ("nvarchar", "nchar"):
-                # allow when target has at least the same character capacity
-                if other_size >= self_size and enable_safe_type_expansion:
+    @staticmethod
+    def _integer_digits(col: "SQLServerColumn") -> int:
+        """Return the number of integer digits for a numeric/integer column.
+
+        For numeric/decimal columns: precision - scale.
+        For integer types: the maximum decimal precision required.
+        For fixed-money types: precision - scale of their effective representation.
+        """
+        dtype = col.dtype.lower()
+        if col.is_decimal_type():
+            prec = int(col.numeric_precision or 0)
+            scale = int(col.numeric_scale or 0)
+            return prec - scale
+        if col.is_fixed_numeric():
+            # Treat money/smallmoney as fixed-scale numerics
+            if dtype == "smallmoney":
+                return 10 - 4  # effectively numeric(10,4)
+            elif dtype == "money":
+                return 19 - 4  # effectively numeric(19,4)
+        if col.is_integer():
+            if dtype in ("bit",):
+                return 1
+            if dtype in ("tinyint",):
+                return 3
+            if dtype in ("smallint",):
+                return 5
+            if dtype in ("bigint",):
+                return 19
+            # int, integer
+            return 10
+        return 0
+
+    @staticmethod
+    def _scale(col: "SQLServerColumn") -> int:
+        """Return the scale for numeric / fixed-money columns."""
+        if col.is_decimal_type():
+            return int(col.numeric_scale or 0)
+        if col.is_fixed_numeric():
+            # smallmoney and money both have scale 4
+            return 4
+        return 0
+
+    def can_expand_safe(self, other_column: "SQLServerColumn") -> bool:
+        self_dtype = self.dtype.lower()
+        other_dtype = other_column.dtype.lower()
+
+        if self.is_string() and other_column.is_string():
+            # Cross-family varchar/char -> nvarchar/nchar guarded expansion
+            # Also nchar -> nvarchar (fixed-width unicode to variable-width unicode)
+            if (self_dtype in ("varchar", "char") and other_dtype in ("nvarchar", "nchar")) or (
+                self_dtype == "nchar" and other_dtype == "nvarchar"
+            ):
+                self_max = self.is_max_string()
+                other_max = other_column.is_max_string()
+
+                # varchar(max) -> nvarchar(max): allowed behind safe flag
+                if self_max and other_max:
                     return True
+                # varchar(max) -> nvarchar(n): rejected for every bounded n
+                if self_max and not other_max:
+                    return False
+                # varchar(n) -> nvarchar(max): allowed
+                if not self_max and other_max:
+                    return True
+                # varchar(n) -> nvarchar(m): normal bounded comparison
+                return other_column.string_size() >= self.string_size()
 
-            # If none of the string rules matched, we can't expand.
+            # Same-family string handled by can_expand_to
             return False
 
-        # If we reach here, at least one side is not a string. Apply integer/
-        # numeric promotion logic only if the adapter has enabled type expansion.
-        if not enable_safe_type_expansion or not self.is_number() or not other_column.is_number():
+        if not self.is_number() or not other_column.is_number():
             return False
 
-        # Integer family promotions (tinyint -> smallint -> int -> bigint)
         int_family = ("bit", "tinyint", "smallint", "int", "bigint")
         if self_dtype in int_family and other_dtype in int_family:
-            if int_family.index(other_dtype) > int_family.index(self_dtype):
-                return True
+            return int_family.index(other_dtype) > int_family.index(self_dtype)
 
-        self_prec = int(self.numeric_precision or 0)
-        other_prec = int(other_column.numeric_precision or 0)
-        # Integer -> numeric/decimal is a safe widening (integers fit in numerics).
-        if self.is_integer() and other_column.is_numeric() and other_prec > self_prec:
-            return True
+        # Integer -> decimal/numeric expansion
+        if self.is_integer() and other_column.is_decimal_type():
+            source_int_digits = self._integer_digits(self)
+            target_scale = self._scale(other_column)
+            target_int_digits = self._integer_digits(other_column)
+            return target_scale >= 0 and target_int_digits >= source_int_digits
 
-        # Numeric/Decimal promotions: allow when target precision >= source precision
-        # and target scale >= source scale (so we don't lose fractional digits).
-        if (self.is_numeric() or self.is_fixed_numeric()) and (
-            other_column.is_numeric() or other_column.is_fixed_numeric()
+        # Numeric/decimal <-> fixed-money type expansion
+        if (self.is_decimal_type() or self.is_fixed_numeric()) and (
+            other_column.is_decimal_type() or other_column.is_fixed_numeric()
         ):
-            # Access precision/scale directly from columns. Fall back to 0 when missing.
-            self_scale = int(self.numeric_scale or 0)
-            other_scale = int(other_column.numeric_scale or 0)
+            source_scale = self._scale(self)
+            target_scale = self._scale(other_column)
+            source_int_digits = self._integer_digits(self)
+            target_int_digits = self._integer_digits(other_column)
 
-            if other_prec >= self_prec and other_scale >= self_scale:
-                if other_prec > self_prec or other_scale > self_scale or self_dtype != other_dtype:
+            if target_scale >= source_scale and target_int_digits >= source_int_digits:
+                # Must be a real widening — a pure type rename without
+                # increasing integer digits or scale is not an expansion.
+                if target_int_digits > source_int_digits or target_scale > source_scale:
                     return True
 
         return False
