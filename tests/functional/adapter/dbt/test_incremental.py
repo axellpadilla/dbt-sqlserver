@@ -4,6 +4,10 @@ from dbt.tests.adapter.incremental import fixtures
 from dbt.tests.adapter.incremental.test_incremental_on_schema_change import (
     BaseIncrementalOnSchemaChange,
 )
+from dbt.tests.adapter.incremental.test_incremental_predicates import (
+    TestIncrementalPredicatesDeleteInsert,
+    TestPredicatesDeleteInsert,
+)
 from dbt.tests.util import run_dbt, write_file
 
 _MODELS__INCREMENTAL_IGNORE_SQLServer = """
@@ -117,6 +121,14 @@ select
   cast(1240.14 as money) as num_money
 {% endif %}
 """
+
+
+class TestIncrementalPredicatesDeleteInsert(TestIncrementalPredicatesDeleteInsert):
+    pass
+
+
+class TestPredicatesDeleteInsert(TestPredicatesDeleteInsert):
+    pass
 
 
 class TestIncrementalOnSchemaChangeExpands:

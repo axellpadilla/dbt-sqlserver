@@ -104,3 +104,4 @@ venv.bak/
 .mise.toml
 
 devcontainer-lock.json
+opencode.jsonc
