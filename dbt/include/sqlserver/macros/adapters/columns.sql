@@ -37,10 +37,6 @@
 {% endmacro %}
 
 {% macro sqlserver__alter_column_type(relation, column_name, new_column_type) %}
-    {% if flags.sqlserver__prefer_single_alter_column and relation.type == 'table' %}
-        {% set alter_column_type_sql %}
-            alter {{ relation.type }} {{ relation }} alter column "{{ column_name }}" {{ new_column_type }};
-        {%- endset %}
 
     {% set prefer_single = config.get('prefer_single_alter_column', false) %}
 
