@@ -96,9 +96,7 @@ class SQLServerColumn(Column):
         return dtype in ("varchar", "nvarchar") and int(self.char_size or 0) == -1
 
     def is_number(self):
-        return any(
-            [self.is_integer(), self.is_numeric(), self.is_float(), self.is_fixed_numeric()]
-        )
+        return any([self.is_integer(), self.is_numeric(), self.is_float()])
 
     def is_float(self):
         return self.dtype.lower() in ["float", "real"]
@@ -118,7 +116,7 @@ class SQLServerColumn(Column):
         ]
 
     def is_numeric(self) -> bool:
-        return self.dtype.lower() in ["numeric", "decimal"]
+        return self.dtype.lower() in ["numeric", "decimal", "money", "smallmoney"]
 
     def is_fixed_numeric(self) -> bool:
         return self.dtype.lower() in ["money", "smallmoney"]
