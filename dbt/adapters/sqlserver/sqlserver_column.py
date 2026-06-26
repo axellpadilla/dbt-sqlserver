@@ -131,6 +131,9 @@ class SQLServerColumn(Column):
         """
         return self.dtype.lower() in ["numeric", "decimal"]
 
+    def is_fixed_numeric(self) -> bool:
+        return self.dtype.lower() in ["money", "smallmoney"]
+
     def string_size(self) -> int:
         if not self.is_string():
             raise DbtRuntimeError("Called string_size() on non-string field!")

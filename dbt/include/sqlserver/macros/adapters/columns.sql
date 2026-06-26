@@ -37,27 +37,40 @@
 {% endmacro %}
 
 {% macro sqlserver__alter_column_type(relation, column_name, new_column_type) %}
-    {%- set tmp_column = column_name + "__dbt_alter" -%}
 
-    {% set add_column %}
-        alter {{ relation.type }} {{ relation }}
-        add "{{ tmp_column }}" {{ new_column_type }};
-    {%- endset %}
-    {% set update_column %}
-        update {{ relation }} set "{{ tmp_column }}" = "{{ column_name }}";
-    {%- endset %}
-    {% set drop_column %}
-        alter {{ relation.type }} {{ relation }}
-        drop column "{{ column_name }}";
-    {%- endset %}
-    {% set rename_column %}
-        exec sp_rename '{{ relation | replace('"', '') }}.{{ tmp_column }}', '{{ column_name }}', 'column'
-    {%- endset %}
+    {% set prefer_single = config.get('prefer_single_alter_column', false) %}
 
-    {% do run_query(add_column) %}
-    {% do run_query(update_column) %}
-    {% do run_query(drop_column) %}
-    {% do run_query(rename_column) %}
+    {% if prefer_single and relation.type == 'table' %}
+        {% set alter_sql %}
+            alter {{ relation.type }} {{ relation }}
+            alter column "{{ column_name }}" {{ new_column_type }};
+        {%- endset %}
+        {% do run_query(alter_sql) %}
+
+    {% else %}
+        {%- set tmp_column = column_name + "__dbt_alter" -%}
+
+        {% set add_column %}
+            alter {{ relation.type }} {{ relation }}
+            add "{{ tmp_column }}" {{ new_column_type }};
+        {%- endset %}
+        {% set update_column %}
+            update {{ relation }} set "{{ tmp_column }}" = "{{ column_name }}";
+        {%- endset %}
+        {% set drop_column %}
+            alter {{ relation.type }} {{ relation }}
+            drop column "{{ column_name }}";
+        {%- endset %}
+        {% set rename_column %}
+            exec sp_rename '{{ relation | replace('"', '') }}.{{ tmp_column }}', '{{ column_name }}', 'column'
+        {%- endset %}
+
+        {% do run_query(add_column) %}
+        {% do run_query(update_column) %}
+        {% do run_query(drop_column) %}
+        {% do run_query(rename_column) %}
+    {% endif %}
+
 {% endmacro %}
 
 
