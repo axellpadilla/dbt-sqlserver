@@ -10,6 +10,32 @@ from dbt.tests.adapter.incremental.test_incremental_predicates import (
 )
 from dbt.tests.util import run_dbt, write_file
 
+
+def _column_metadata(project, schema, table, column):
+    rows = project.run_sql(
+        f"""
+        select
+            t.name,
+            c.max_length,
+            c.precision,
+            c.scale
+        from [{project.database}].sys.columns c
+        inner join [{project.database}].sys.types t
+            on c.user_type_id = t.user_type_id
+        where c.object_id = object_id('[{project.database}].[{schema}].[{table}]')
+          and c.name = '{column}'
+        """,
+        fetch="all",
+    )
+    assert rows, f"Missing column metadata for {schema}.{table}.{column}"
+
+    data_type, max_length, numeric_precision, numeric_scale = rows[0]
+    if data_type in ("nchar", "nvarchar", "sysname") and max_length is not None:
+        max_length //= 2
+        return data_type, max_length, None, None
+    return data_type, None, numeric_precision, numeric_scale
+
+
 _MODELS__INCREMENTAL_IGNORE_SQLServer = """
 {{
     config(
@@ -94,6 +120,14 @@ class TestIncrementalOnSchemaChange(BaseIncrementalOnSchemaChange):
         }
 
 
+class TestIncrementalPredicatesDeleteInsert(TestIncrementalPredicatesDeleteInsert):
+    pass
+
+
+class TestPredicatesDeleteInsert(TestPredicatesDeleteInsert):
+    pass
+
+
 _INCREMENTAL__WIDEN_TYPES_SQLServer = """
 {{
     config(
@@ -123,18 +157,10 @@ select
 """
 
 
-class TestIncrementalPredicatesDeleteInsert(TestIncrementalPredicatesDeleteInsert):
-    pass
-
-
-class TestPredicatesDeleteInsert(TestPredicatesDeleteInsert):
-    pass
-
-
 class TestIncrementalOnSchemaChangeExpands:
     @pytest.fixture(scope="class")
     def project_config_update(self):
-        return {"flags": {"sqlserver__enable_safe_type_expansion": True}}
+        return {"flags": {"dbt_sqlserver_enable_safe_type_expansion": True}}
 
     def test_run_incremental_widen_types(self, project):
         """Full-refresh to create small types, then incremental to widen types."""
@@ -149,4 +175,15 @@ class TestIncrementalOnSchemaChangeExpands:
         # incremental branch inserts larger values
         run_dbt(["run", "--models", "incremental_change_widen"])
 
-        return True
+        assert _column_metadata(
+            project, project.test_schema, "incremental_change_widen", "field1"
+        ) == ("nvarchar", 10, None, None)
+        assert _column_metadata(
+            project, project.test_schema, "incremental_change_widen", "num_int"
+        ) == ("int", None, 10, 0)
+        assert _column_metadata(
+            project, project.test_schema, "incremental_change_widen", "num_decimal"
+        ) == ("decimal", None, 10, 4)
+        assert _column_metadata(
+            project, project.test_schema, "incremental_change_widen", "num_money"
+        ) == ("decimal", None, 20, 4)
