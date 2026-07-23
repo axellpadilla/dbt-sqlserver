@@ -118,9 +118,6 @@ class SQLServerColumn(Column):
     def is_numeric(self) -> bool:
         return self.dtype.lower() in ["numeric", "decimal", "money", "smallmoney"]
 
-    def is_fixed_numeric(self) -> bool:
-        return self.dtype.lower() in ["money", "smallmoney"]
-
     def is_decimal_type(self) -> bool:
         """Return True for true arbitrary-precision numeric/decimal types only.
 
@@ -128,6 +125,9 @@ class SQLServerColumn(Column):
         as numeric by is_numeric() for backward compatibility.
         """
         return self.dtype.lower() in ["numeric", "decimal"]
+
+    def is_fixed_numeric(self) -> bool:
+        return self.dtype.lower() in ["money", "smallmoney"]
 
     def string_size(self) -> int:
         if not self.is_string():

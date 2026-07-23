@@ -177,13 +177,33 @@ class TestIncrementalOnSchemaChangeExpands:
 
         assert _column_metadata(
             project, project.test_schema, "incremental_change_widen", "field1"
-        ) == ("nvarchar", 10, None, None)
+        ) == (
+            "nvarchar",
+            10,
+            None,
+            None,
+        )
         assert _column_metadata(
             project, project.test_schema, "incremental_change_widen", "num_int"
-        ) == ("int", None, 10, 0)
+        ) == (
+            "int",
+            None,
+            10,
+            0,
+        )
         assert _column_metadata(
             project, project.test_schema, "incremental_change_widen", "num_decimal"
-        ) == ("decimal", None, 10, 4)
+        ) == (
+            "decimal",
+            None,
+            10,
+            4,
+        )
         assert _column_metadata(
             project, project.test_schema, "incremental_change_widen", "num_money"
-        ) == ("decimal", None, 20, 4)
+        ) == (
+            "decimal",
+            None,
+            20,
+            4,
+        )
